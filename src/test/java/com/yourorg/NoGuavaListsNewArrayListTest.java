@@ -77,6 +77,39 @@ class NoInstanceMethodsWithoutInstanceDataTest implements RewriteTest {
     }
 
     @Test
+    void simple() {
+        rewriteRun(
+            java("""
+                        class Test {
+                          private String instanceWord = "sdlkfj";
+                        
+                          private String getInstanceWord() {
+                            return instanceWord;
+                          }
+                          
+                          private void doSomethingStaticky() {
+                            System.out.println("unchanging string");
+                          }
+                        }
+                    """,
+                """
+                        class Test {
+                          private String instanceWord = "sdlkfj";
+                        
+                          private String getInstanceWord() {
+                            return instanceWord;
+                          }
+                          
+                          private static void doSomethingStaticky() {
+                            System.out.println("unchanging string");
+                          }
+                        }
+                    """
+            )
+        );
+    }
+
+    @Test
     void addStaticKeywordToFauxInstanceMethods() {
         rewriteRun(
             java("""

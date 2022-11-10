@@ -32,39 +32,28 @@ import java.util.function.Predicate;
 @EqualsAndHashCode(callSuper = true)
 public class MakeFalseInstanceMethodsStatic extends Recipe {
 
+    private static final MethodMatcher SERIALIZABLE_WRITE_OBJECT = new MethodMatcher("java.io.Serializable writeObject(java.io.ObjectOutputStream)");
+    private static final MethodMatcher SERIALIZABLE_READ_OBJECT = new MethodMatcher("java.io.Serializable readObject(java.io.ObjectInputStream)");
+    private static final MethodMatcher SERIALIZABLE_READ_OBJECT_NO_DATA = new MethodMatcher("java.io.Serializable readObjectNoData()");
+
     @Override
     public String getDisplayName() {
-        return "Change method name";
+        return "Make false instance methods static";
     }
 
     @Override
     public String getDescription() {
-        return "Rename a method.";
-    }
-
-    @Override
-    public boolean causesAnotherCycle() {
-        return true;
+        return "Change methods to static if they are private or final, access no instance data, and are not one of the excluded serializable methods.";
     }
 
     @Override
     public JavaVisitor<ExecutionContext> getVisitor() {
-        return new ChangeMethodNameVisitor();
+        return new MakeFalseInstanceMethodsStaticVisitor();
     }
 
-    private class ChangeMethodNameVisitor extends JavaIsoVisitor<ExecutionContext> {
+    private class MakeFalseInstanceMethodsStaticVisitor extends JavaIsoVisitor<ExecutionContext> {
 
-        private ChangeMethodNameVisitor() {
-
-        }
-
-        @Override
-        public J.Block visitBlock(J.Block block, ExecutionContext p) {
-            System.out.println("visiting block: " + block.getStatements().toString());
-
-            J.Block b = super.visitBlock(block, p);
-            return block;
-        }
+        private MakeFalseInstanceMethodsStaticVisitor() {}
 
         @Override
         public J.CompilationUnit visitCompilationUnit(J.CompilationUnit cu, ExecutionContext p) {
@@ -89,9 +78,10 @@ public class MakeFalseInstanceMethodsStatic extends Recipe {
                     if (statement instanceof J.MethodDeclaration) {
                         J.MethodDeclaration md = (J.MethodDeclaration) statement;
                         allMethods.add(md);
-                        if ((md.hasModifier(J.Modifier.Type.Private) || md.hasModifier(J.Modifier.Type.Final))) {
-                                // todo filter out serializable methods
-//                            && md.) {
+                        if ((md.hasModifier(J.Modifier.Type.Private) || md.hasModifier(J.Modifier.Type.Final))
+                                && !SERIALIZABLE_WRITE_OBJECT.matches(md, clazz)
+                                && !SERIALIZABLE_READ_OBJECT.matches(md, clazz)
+                                && !SERIALIZABLE_READ_OBJECT_NO_DATA.matches(md, clazz)) {
                             methodsEligibleForUpdate.add(md);
                         }
                     }
@@ -100,11 +90,12 @@ public class MakeFalseInstanceMethodsStatic extends Recipe {
 
             // find any methods that reference instance variables and add them to the list of instance methods
             for (J.MethodDeclaration method : allMethods) {
-                Cursor parentScope = getCursor(); // this is the wrong scope. need method body scope but am getting class scope
+                setCursor(new Cursor(getCursor(), method));
+                Cursor methodScope = getCursor();
                 for (J.VariableDeclarations instanceVariable : instanceVariables) {
                     J.Identifier variableName = instanceVariable.getVariables().get(0).getName(); // this isn't robust enough, i admit
-                    List<J> readReferences = References.findRhsReferences(parentScope.getValue(), variableName);
-                    List<Statement> assignmentReferences = References.findLhsReferences(parentScope.getValue(), variableName);
+                    List<J> readReferences = References.findRhsReferences(methodScope.getValue(), variableName);
+                    List<Statement> assignmentReferences = References.findLhsReferences(methodScope.getValue(), variableName);
                     if (readReferences.size() > 0 || assignmentReferences.size() > 0) {
                         instanceMethods.add(method);
                         methodsEligibleForUpdate.remove(method);
@@ -120,13 +111,12 @@ public class MakeFalseInstanceMethodsStatic extends Recipe {
             while (newInstanceMethods.size() > 0) {
                 newInstanceMethods.clear(); // reset newInstanceMethods so that it will only contain this iteration's new methods
                 for (J.MethodDeclaration method : methodsEligibleForUpdate) {
-                    Cursor parentScope = getCursor();
+                    setCursor(new Cursor(getCursor(), method));
+                    Cursor methodScope = getCursor();
                     for (J.MethodDeclaration instanceMethod : instanceMethods) {
                         J.Identifier instanceMethodName = instanceMethod.getName();
-                        List<J> readReferences = References.findRhsReferences(parentScope.getValue(), instanceMethodName);
-                        // need to check that these findRhs and findLhs do what I expect them to do for methods since they were
-                        // written originally for variables
-                        List<Statement> assignmentReferences = References.findLhsReferences(parentScope.getValue(), instanceMethodName);
+                        List<J> readReferences = References.findRhsReferences(methodScope.getValue(), instanceMethodName);
+                        List<Statement> assignmentReferences = References.findLhsReferences(methodScope.getValue(), instanceMethodName);
                         if (readReferences.size() > 0 || assignmentReferences.size() > 0) {
                             newInstanceMethods.add(instanceMethod);
                             methodsEligibleForUpdate.remove(method);
@@ -136,7 +126,7 @@ public class MakeFalseInstanceMethodsStatic extends Recipe {
                 instanceMethods.addAll(newInstanceMethods);
             }
 
-            // TODO - modify methodsEligibleForUpdate to include static flag
+            // modify any eligible methods to include static flag
             for (J.MethodDeclaration eligibleMethod : methodsEligibleForUpdate) {
                 String fullyQualifiedTargetName = eligibleMethod.getMethodType().getDeclaringType().getFullyQualifiedName();
                 doAfterVisit(new ChangeMethodTargetToStatic(MethodMatcher.methodPattern(eligibleMethod), fullyQualifiedTargetName, null, null));
@@ -144,62 +134,8 @@ public class MakeFalseInstanceMethodsStatic extends Recipe {
 
             return cu;
         }
-
-        @Override
-        public J.ClassDeclaration visitClassDeclaration(J.ClassDeclaration classDecl, ExecutionContext executionContext) {
-            System.out.println("visiting compilation unit: " + classDecl);
-            return classDecl;
-        }
-
-
-            // when visiting variable declarations, i need to make sure they belong to the parent class, not to a method
-        @Override
-        public J.VariableDeclarations visitVariableDeclarations(J.VariableDeclarations multiVariable, ExecutionContext ctx) {
-            System.out.println("visiting variable declaration: " + multiVariable.getVariables().get(0).getSimpleName());
-//            if (multiVariable.getTypeExpression() instanceof J.MultiCatch) {
-//                return multiVariable;
-//            }
-//            if (multiVariable.getTypeExpression() != null &&
-//                    hasElementType(multiVariable.getTypeExpression().getType(), fullyQualifiedTypeName) &&
-//                    isField(getCursor())) {
-//                return SearchResult.found(multiVariable);
-//            }
-            return multiVariable;
-        }
-
-        @Override
-        public J.MethodDeclaration visitMethodDeclaration(J.MethodDeclaration method, ExecutionContext ctx) {
-            System.out.println("visiting method declaration: " + method.getSimpleName());
-            J.MethodDeclaration m = super.visitMethodDeclaration(method, ctx);
-            J.ClassDeclaration classDecl = getCursor().firstEnclosing(J.ClassDeclaration.class);
-            return m;
-        }
-
-        @Override
-        public J.MethodInvocation visitMethodInvocation(J.MethodInvocation method, ExecutionContext ctx) {
-            J.MethodInvocation m = super.visitMethodInvocation(method, ctx);
-            return m;
-        }
-
-        @Override
-        public J.MemberReference visitMemberReference(J.MemberReference memberRef, ExecutionContext context) {
-            J.MemberReference m = super.visitMemberReference(memberRef, context);
-            return m;
-        }
-
-        /**
-         * The only time field access should be relevant to changing method names is static imports.
-         * This exists to turn
-         * import static com.abc.B.static1;
-         * into
-         * import static com.abc.B.static2;
-         */
-        @Override
-        public J.FieldAccess visitFieldAccess(J.FieldAccess fieldAccess, ExecutionContext ctx) {
-            J.FieldAccess f = super.visitFieldAccess(fieldAccess, ctx);
-            return f;
-        }
     }
+
 
     // I borrowed this from RemoveUnusedLocalVariables. Would abstract it out to be shared given more time.
     private static class References {
