@@ -24,9 +24,14 @@ import org.openrewrite.java.JavaIsoVisitor;
 import org.openrewrite.java.JavaVisitor;
 import org.openrewrite.java.MethodMatcher;
 import org.openrewrite.java.tree.*;
+import org.openrewrite.marker.Markers;
 
 import java.util.*;
 import java.util.function.Predicate;
+
+import static java.util.Collections.emptyList;
+import static org.openrewrite.Tree.randomId;
+import static org.openrewrite.java.tree.Space.EMPTY;
 
 @Value
 @EqualsAndHashCode(callSuper = true)
@@ -59,13 +64,15 @@ public class MakeFalseInstanceMethodsStatic extends Recipe {
         public J.CompilationUnit visitCompilationUnit(J.CompilationUnit cu, ExecutionContext p) {
             List<J.ClassDeclaration> classes = cu.getClasses(); // this was originally to account for nested classes, don't know if still needed
 
-            List<J.VariableDeclarations> instanceVariables = new ArrayList<J.VariableDeclarations>();
-
-            List<J.MethodDeclaration> allMethods = new ArrayList<J.MethodDeclaration>();
-            List<J.MethodDeclaration> methodsEligibleForUpdate = new ArrayList<J.MethodDeclaration>();
-            List<J.MethodDeclaration> instanceMethods = new ArrayList<J.MethodDeclaration>();
-
+            // might need to make this for loop contain the above variables and extend over the for loop over eligible methods
+            // in the case of multiple non-nested classes since they won't share scope
             for (J.ClassDeclaration clazz : classes) {
+                List<J.VariableDeclarations> instanceVariables = new ArrayList<J.VariableDeclarations>();
+
+                List<J.MethodDeclaration> allMethods = new ArrayList<J.MethodDeclaration>();
+                List<J.MethodDeclaration> methodsEligibleForUpdate = new ArrayList<J.MethodDeclaration>();
+                List<J.MethodDeclaration> instanceMethods = new ArrayList<J.MethodDeclaration>();
+
                 for (Statement statement : clazz.getBody().getStatements()) {
                     // aggregate all variable declarations as instance data
                     if (statement instanceof J.VariableDeclarations) {
@@ -86,54 +93,67 @@ public class MakeFalseInstanceMethodsStatic extends Recipe {
                         }
                     }
                 }
-            }
 
-            // find any methods that reference instance variables and add them to the list of instance methods
-            for (J.MethodDeclaration method : allMethods) {
-                setCursor(new Cursor(getCursor(), method));
-                Cursor methodScope = getCursor();
-                for (J.VariableDeclarations instanceVariable : instanceVariables) {
-                    J.Identifier variableName = instanceVariable.getVariables().get(0).getName(); // this isn't robust enough, i admit
-                    List<J> readReferences = References.findRhsReferences(methodScope.getValue(), variableName);
-                    List<Statement> assignmentReferences = References.findLhsReferences(methodScope.getValue(), variableName);
-                    if (readReferences.size() > 0 || assignmentReferences.size() > 0) {
-                        instanceMethods.add(method);
-                        methodsEligibleForUpdate.remove(method);
-                    }
-                }
-            }
-
-            List<J.MethodDeclaration> newInstanceMethods = instanceMethods;
-
-            // use this while loop to continue scanning the list of eligible methods to see if any of them call
-            // an instance method in which case they'll be removed. each loop might add more instance methods to check.
-            // once no new instance methods have been added, any remaining eligible methods can be marked static
-            while (newInstanceMethods.size() > 0) {
-                newInstanceMethods.clear(); // reset newInstanceMethods so that it will only contain this iteration's new methods
-                for (J.MethodDeclaration method : methodsEligibleForUpdate) {
+                // find any methods that reference instance variables and add them to the list of instance methods
+                for (J.MethodDeclaration method : allMethods) {
                     setCursor(new Cursor(getCursor(), method));
                     Cursor methodScope = getCursor();
-                    for (J.MethodDeclaration instanceMethod : instanceMethods) {
-                        J.Identifier instanceMethodName = instanceMethod.getName();
-                        List<J> readReferences = References.findRhsReferences(methodScope.getValue(), instanceMethodName);
-                        List<Statement> assignmentReferences = References.findLhsReferences(methodScope.getValue(), instanceMethodName);
+                    for (J.VariableDeclarations instanceVariable : instanceVariables) {
+                        J.Identifier variableName = instanceVariable.getVariables().get(0).getName(); // this isn't robust enough, i admit
+                        List<J> readReferences = References.findRhsReferences(methodScope.getValue(), variableName);
+                        List<Statement> assignmentReferences = References.findLhsReferences(methodScope.getValue(), variableName);
                         if (readReferences.size() > 0 || assignmentReferences.size() > 0) {
-                            newInstanceMethods.add(instanceMethod);
+                            instanceMethods.add(method);
                             methodsEligibleForUpdate.remove(method);
                         }
                     }
                 }
-                instanceMethods.addAll(newInstanceMethods);
-            }
 
-            // modify any eligible methods to include static flag
-            for (J.MethodDeclaration eligibleMethod : methodsEligibleForUpdate) {
-                String fullyQualifiedTargetName = eligibleMethod.getMethodType().getDeclaringType().getFullyQualifiedName();
-                doAfterVisit(new ChangeMethodTargetToStatic(MethodMatcher.methodPattern(eligibleMethod), fullyQualifiedTargetName, null, null));
+                List<J.MethodDeclaration> newInstanceMethods = instanceMethods;
+
+                // use this while loop to continue scanning the list of eligible methods to see if any of them call
+                // an instance method in which case they'll be removed. each loop might add more instance methods to check.
+                // once no new instance methods have been added, any remaining eligible methods can be marked static
+                while (newInstanceMethods.size() > 0) {
+                    newInstanceMethods.clear(); // reset newInstanceMethods so that it will only contain this iteration's new methods
+                    for (J.MethodDeclaration method : methodsEligibleForUpdate) {
+                        setCursor(new Cursor(getCursor(), method));
+                        Cursor methodScope = getCursor();
+                        for (J.MethodDeclaration instanceMethod : instanceMethods) {
+                            J.Identifier instanceMethodName = instanceMethod.getName();
+                            List<J> readReferences = References.findRhsReferences(methodScope.getValue(), instanceMethodName);
+                            List<Statement> assignmentReferences = References.findLhsReferences(methodScope.getValue(), instanceMethodName);
+                            if (readReferences.size() > 0 || assignmentReferences.size() > 0) {
+                                newInstanceMethods.add(instanceMethod);
+                                methodsEligibleForUpdate.remove(method);
+                            }
+                        }
+                    }
+                    instanceMethods.addAll(newInstanceMethods);
+                }
+
+                // modify any eligible methods to include static flag
+                for (J.MethodDeclaration eligibleMethod : methodsEligibleForUpdate) {
+                    if (!eligibleMethod.hasModifier(J.Modifier.Type.Static)) {
+                        List<J.Modifier> modifiers = eligibleMethod.getModifiers();
+                        J.Modifier staticModifier = new J.Modifier(randomId(), Space.build(" ", emptyList()), Markers.EMPTY, J.Modifier.Type.Static, emptyList());
+                        modifiers.add(staticModifier);
+                        eligibleMethod.withModifiers(modifiers);
+                    }
+                }
             }
 
             return cu;
         }
+
+//        @Override
+//        public J.MethodDeclaration visitMethodDeclaration(J.MethodDeclaration method, ExecutionContext p) {
+//            J.MethodDeclaration m = super.visitMethodDeclaration(method, p);
+//            J.ClassDeclaration classDecl = getCursor().firstEnclosing(J.ClassDeclaration.class);
+//            if (classDecl == null) {
+//                return m;
+//            }
+//        }
     }
 
 

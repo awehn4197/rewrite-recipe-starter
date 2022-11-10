@@ -6,7 +6,7 @@ import org.openrewrite.test.RewriteTest;
 
 import static org.openrewrite.java.Assertions.java;
 
-class NoInstanceMethodsWithoutInstanceDataTest implements RewriteTest {
+class MakeFalseInstanceMethodsStaticTest implements RewriteTest {
 
     //Note, you can define defaults for the RecipeSpec and these defaults will be used for all tests.
     //In this case, the recipe and the parser are common. See below, on how the defaults can be overridden
