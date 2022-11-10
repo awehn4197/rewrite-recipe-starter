@@ -1,49 +1,71 @@
 package com.yourorg;
 
 import org.junit.jupiter.api.Test;
-import org.openrewrite.java.JavaParser;
 import org.openrewrite.test.RecipeSpec;
 import org.openrewrite.test.RewriteTest;
 
 import static org.openrewrite.java.Assertions.java;
 
-class NoGuavaListsNewArrayListTest implements RewriteTest {
+class NoInstanceMethodsWithoutInstanceDataTest implements RewriteTest {
 
     //Note, you can define defaults for the RecipeSpec and these defaults will be used for all tests.
     //In this case, the recipe and the parser are common. See below, on how the defaults can be overridden
     //per test.
     @Override
     public void defaults(RecipeSpec spec) {
-        spec.recipe(new NoGuavaListsNewArrayList())
-            .parser(JavaParser.fromJavaVersion()
-                .logCompilationWarningsAndErrors(true)
-                .classpath("guava"));
+        spec.recipe(new MakeFalseInstanceMethodsStatic());
     }
 
     @Test
-    void replaceWithNewArrayList() {
+    void demoTest() {
         rewriteRun(
-            //There is an overloaded version or rewriteRun that allows the RecipeSpec to be customized specifically
-            //for a given test. In this case, the parser for this test is configured to not log compilation warnings.
-            spec -> spec
-                .parser(JavaParser.fromJavaVersion()
-                    .logCompilationWarningsAndErrors(false)
-                    .classpath("guava")),
             java("""
-                        import com.google.common.collect.*;
-                        
-                        import java.util.List;
-                        
                         class Test {
-                            List<Integer> cardinalsWorldSeries = Lists.newArrayList();
+                          private static String magicWord = "magic";
+                          private String otherWord = "other";
+                        
+                          private String getMagicWord() {
+                            String fancyFooBar = "fantastic" + otherWord;
+                            otherWord = "somethingElse";
+                            return magicWord;
+                          }
+                          
+                          private static String midFileString = "sldkfj";
+                        
+                          private void setMagicWord(String value) {
+                            magicWord = value;
+                          }
+                          
+                          class Nested {
+                              private static String magicWord2 = "magic2";
+                              private String nestedOtherWord = "sldkfj";
+                        
+                              private String getMagicWord2() {
+                                String fancyFooBar = "fantastic";
+                                return magicWord2;
+                              }
+                              
+                              private static String midFileString2 = "sldkfj2";
+                            
+                              private void setMagicWord2(String value) {
+                                magicWord2 = value;
+                              }
+                          }
+                        
                         }
                     """,
                 """
-                        import java.util.ArrayList;
-                        import java.util.List;
-                        
                         class Test {
-                            List<Integer> cardinalsWorldSeries = new ArrayList<>();
+                          private static String magicWord = "magic";
+                        
+                          private static String getMagicWord() {
+                            return magicWord;
+                          }
+                        
+                          private static void setMagicWord(String value) {
+                            magicWord = value;
+                          }
+                        
                         }
                     """
             )
@@ -51,27 +73,38 @@ class NoGuavaListsNewArrayListTest implements RewriteTest {
     }
 
     @Test
-    void replaceWithNewArrayListIterable() {
+    void addStaticKeywordToFauxInstanceMethods() {
         rewriteRun(
             java("""
-                        import com.google.common.collect.*;
-                        
-                        import java.util.Collections;
-                        import java.util.List;
-                        
                         class Test {
-                            List<Integer> l = Collections.emptyList();
-                            List<Integer> cardinalsWorldSeries = Lists.newArrayList(l);
+                          private static String magicWord = "magic";
+                        
+                          private String getMagicWord() {
+                            String fancyFooBar = "fantastic";
+                            return magicWord;
+                          }
+                          
+                          // this person is weird and mean and declared a variable in the middle of their file :(
+                          private static String midFileString = "sldkfj";
+                        
+                          private void setMagicWord(String value) {
+                            magicWord = value;
+                          }
+                        
                         }
                     """,
                 """
-                        import java.util.ArrayList;
-                        import java.util.Collections;
-                        import java.util.List;
-                        
                         class Test {
-                            List<Integer> l = Collections.emptyList();
-                            List<Integer> cardinalsWorldSeries = new ArrayList<>(l);
+                          private static String magicWord = "magic";
+                        
+                          private static String getMagicWord() {
+                            return magicWord;
+                          }
+                        
+                          private static void setMagicWord(String value) {
+                            magicWord = value;
+                          }
+                        
                         }
                     """
             )
@@ -79,26 +112,238 @@ class NoGuavaListsNewArrayListTest implements RewriteTest {
     }
 
     @Test
-    void replaceWithNewArrayListWithCapacity() {
+    void checksNestedClassesAndMakesChangesIfAppropriate() {
         rewriteRun(
             java("""
-                        import com.google.common.collect.*;
-                        
-                        import java.util.ArrayList;
-                        import java.util.List;
-                        
                         class Test {
-                            List<Integer> cardinalsWorldSeries = Lists.newArrayListWithCapacity(2);
+                          private static String magicWord = "magic";
+                        
+                          private String getMagicWord() {
+                            return magicWord;
+                          }
+                        
+                          private void setMagicWord(String value) {
+                            magicWord = value;
+                          }
+                          
+                          class NestedTest {
+                              private static String boringWord = "boring";
+                            
+                              private String getBoringWord() {
+                                return boringWord;
+                              }
+                            
+                              private void setBoringWord(String value) {
+                                boringWord = value;
+                              }
+                          }
+                        
                         }
                     """,
                 """
-                        import java.util.ArrayList;
-                        import java.util.List;
-                        
                         class Test {
-                            List<Integer> cardinalsWorldSeries = new ArrayList<>(2);
+                          private static String magicWord = "magic";
+                        
+                          private static String getMagicWord() {
+                            return magicWord;
+                          }
+                        
+                          private static void setMagicWord(String value) {
+                            magicWord = value;
+                          }
+                          
+                          class NestedTest {
+                              private static String boringWord = "boring";
+                            
+                              private static String getBoringWord() {
+                                return boringWord;
+                              }
+                            
+                              private static void setBoringWord(String value) {
+                                boringWord = value;
+                              }
+                          }
                         }
-                    """)
+                    """
+            )
+        );
+    }
+
+    @Test
+    void doesntModifyTrueInstanceMethods() {
+        rewriteRun(
+            java("""
+                        class Test {
+                          private String magicWord;
+                        
+                          private String getMagicWord() {
+                            return magicWord;
+                          }
+                        
+                          private void setMagicWord(String value) {
+                            magicWord = value;
+                          }
+                        
+                        }
+                    """,
+                """
+                        class Test {
+                          private String magicWord;
+                        
+                          private String getMagicWord() {
+                            return magicWord;
+                          }
+                        
+                          private void setMagicWord(String value) {
+                            magicWord = value;
+                          }
+                        
+                        }
+                    """
+            )
+        );
+    }
+
+    @Test
+    void doesntModifyIfMethodCallsInstanceMethod() {
+        rewriteRun(
+            java("""
+                        class Test {
+                          private static String staticWord;
+                          private String instanceWord;
+                        
+                          private String getStaticWord() {
+                            return staticWord;
+                          }
+                          
+                          private void setStaticWord(String value) {
+                            staticWord = value;
+                          }
+                        
+                          private String getInstanceWord() {
+                            return instanceWord;
+                          }
+                          
+                          private void setInstanceWord(String value) {
+                            instanceWord = value;
+                          }
+                          
+                          private String getPhrase() {
+                            return getStaticWord()+getInstanceWord();
+                          }
+                        
+                        }
+                    """,
+                """
+                        class Test {
+                          private static String staticWord;
+                          private String instanceWord;
+                        
+                          private static String getStaticWord() {
+                            return staticWord;
+                          }
+                          
+                          private static void setStaticWord(String value) {
+                            staticWord = value;
+                          }
+                        
+                          private String getInstanceWord() {
+                            return instanceWord;
+                          }
+                          
+                          private void setInstanceWord(String value) {
+                            instanceWord = value;
+                          }
+                          
+                          private String getPhrase() {
+                            return getStaticWord()+getInstanceWord();
+                          }
+                        
+                        }
+                    """
+            )
+        );
+    }
+
+    @Test
+    void doesntModifyOverridableMethods() {
+        rewriteRun(
+            java("""
+                        class Test {
+                          private String magicWord;
+                          private String nonMagicWord;
+                        
+                          protected String getMagicWord() {
+                            return magicWord;
+                          }
+                          
+                          String getNonMagicWord() {
+                            return nonMagicWord;
+                          }
+                        
+                          public void setMagicWord(String value) {
+                            magicWord = value;
+                          }
+                                                  
+                        }
+                    """,
+                """
+                        class Test {
+                          private String magicWord;
+                          private String nonMagicWord;
+                        
+                          protected String getMagicWord() {
+                            return magicWord;
+                          }
+                          
+                          String getNonMagicWord() {
+                            return nonMagicWord;
+                          }
+                        
+                          public void setMagicWord(String value) {
+                            magicWord = value;
+                          }
+                                                  
+                        }
+                    """
+            )
+        );
+    }
+
+    @Test
+    void doesntModifyExcludedMethods() {
+        rewriteRun(
+            java("""
+                        class Test {
+                           private void writeObject(java.io.ObjectOutputStream stream) throws IOException {
+                               
+                           }
+                       
+                           private void readObject(java.io.ObjectInputStream stream) throws IOException, ClassNotFoundException {
+                               
+                           }
+                           
+                           private void readObjectNoData() throws ObjectStreamException {
+                           
+                           }
+                        }
+                    """,
+                """
+                        class Test {
+                           private void writeObject(java.io.ObjectOutputStream stream) throws IOException {
+                               
+                           }
+                       
+                           private void readObject(java.io.ObjectInputStream stream) throws IOException, ClassNotFoundException {
+                               
+                           }
+                           
+                           private void readObjectNoData() throws ObjectStreamException {
+                           
+                           }
+                        }
+                    """
+            )
         );
     }
 }
