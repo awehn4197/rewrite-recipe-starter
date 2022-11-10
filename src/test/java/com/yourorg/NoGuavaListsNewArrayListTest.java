@@ -30,6 +30,10 @@ class NoInstanceMethodsWithoutInstanceDataTest implements RewriteTest {
                             return magicWord;
                           }
                           
+                          private String someOtherMethod() {
+                            otherWord = "sldfkj";
+                          }
+                          
                           private static String midFileString = "sldkfj";
                         
                           private void setMagicWord(String value) {
