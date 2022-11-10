@@ -17,66 +17,6 @@ class MakeFalseInstanceMethodsStaticTest implements RewriteTest {
     }
 
     @Test
-    void demoTest() {
-        rewriteRun(
-            java("""
-                        class Test {
-                          private static String magicWord = "magic";
-                          private String otherWord = "other";
-                        
-                          private String getMagicWord() {
-                            String fancyFooBar = "fantastic" + otherWord;
-                            otherWord = "somethingElse";
-                            return magicWord;
-                          }
-                          
-                          private String someOtherMethod() {
-                            otherWord = "sldfkj";
-                          }
-                          
-                          private static String midFileString = "sldkfj";
-                        
-                          private void setMagicWord(String value) {
-                            magicWord = value;
-                          }
-                          
-                          class Nested {
-                              private static String magicWord2 = "magic2";
-                              private String nestedOtherWord = "sldkfj";
-                        
-                              private String getMagicWord2() {
-                                String fancyFooBar = "fantastic";
-                                return magicWord2;
-                              }
-                              
-                              private static String midFileString2 = "sldkfj2";
-                            
-                              private void setMagicWord2(String value) {
-                                magicWord2 = value;
-                              }
-                          }
-                        
-                        }
-                    """,
-                """
-                        class Test {
-                          private static String magicWord = "magic";
-                        
-                          private static String getMagicWord() {
-                            return magicWord;
-                          }
-                        
-                          private static void setMagicWord(String value) {
-                            magicWord = value;
-                          }
-                        
-                        }
-                    """
-            )
-        );
-    }
-
-    @Test
     void simple() {
         rewriteRun(
             java("""

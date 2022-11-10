@@ -61,11 +61,18 @@ public class MakeFalseInstanceMethodsStatic extends Recipe {
         private MakeFalseInstanceMethodsStaticVisitor() {}
 
         @Override
+        public J.ClassDeclaration visitClassDeclaration(J.ClassDeclaration classDecl, ExecutionContext context) {
+//            if(TypeUtils.isOfClassType(classDecl.getType(), oldClassName)) {
+//                // Don't modify the class that declares the static field being replaced
+//                return classDecl;
+//            }
+            return super.visitClassDeclaration(classDecl, context);
+        }
+
+        @Override
         public J.CompilationUnit visitCompilationUnit(J.CompilationUnit cu, ExecutionContext p) {
             List<J.ClassDeclaration> classes = cu.getClasses(); // this was originally to account for nested classes, don't know if still needed
-
-            // might need to make this for loop contain the above variables and extend over the for loop over eligible methods
-            // in the case of multiple non-nested classes since they won't share scope
+            List<J.ClassDeclaration> newClasses = new ArrayList<J.ClassDeclaration>();
             for (J.ClassDeclaration clazz : classes) {
                 List<J.VariableDeclarations> instanceVariables = new ArrayList<J.VariableDeclarations>();
 
@@ -138,22 +145,18 @@ public class MakeFalseInstanceMethodsStatic extends Recipe {
                         List<J.Modifier> modifiers = eligibleMethod.getModifiers();
                         J.Modifier staticModifier = new J.Modifier(randomId(), Space.build(" ", emptyList()), Markers.EMPTY, J.Modifier.Type.Static, emptyList());
                         modifiers.add(staticModifier);
-                        eligibleMethod.withModifiers(modifiers);
+                        eligibleMethod = eligibleMethod.withModifiers(modifiers);
+                        int index = clazz.getBody().getStatements().indexOf(eligibleMethod);
+                        List<Statement> newStatements = clazz.getBody().getStatements();
+                        newStatements.remove(index);
+                        newStatements.add(index, eligibleMethod);
+                        newClasses.add(clazz.withBody(clazz.getBody().withStatements(newStatements)));
                     }
                 }
             }
-
+            cu = cu.withClasses(newClasses);
             return cu;
         }
-
-//        @Override
-//        public J.MethodDeclaration visitMethodDeclaration(J.MethodDeclaration method, ExecutionContext p) {
-//            J.MethodDeclaration m = super.visitMethodDeclaration(method, p);
-//            J.ClassDeclaration classDecl = getCursor().firstEnclosing(J.ClassDeclaration.class);
-//            if (classDecl == null) {
-//                return m;
-//            }
-//        }
     }
 
 
