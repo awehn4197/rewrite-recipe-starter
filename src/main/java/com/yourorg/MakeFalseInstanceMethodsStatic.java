@@ -129,6 +129,7 @@ public class MakeFalseInstanceMethodsStatic extends Recipe {
                 // once no new instance methods have been added, any remaining eligible methods can be marked static
                 while (newInstanceMethods.size() > 0) {
                     newInstanceMethods.clear(); // reset newInstanceMethods so that it will only contain this iteration's new methods
+                    List<J.MethodDeclaration> ineligibleMethods = new ArrayList<J.MethodDeclaration>();
                     for (J.MethodDeclaration method : methodsEligibleForUpdate) {
                         setCursor(new Cursor(getCursor(), method));
                         Cursor methodScope = getCursor();
@@ -138,11 +139,12 @@ public class MakeFalseInstanceMethodsStatic extends Recipe {
                             List<Statement> assignmentReferences = References.findLhsReferences(methodScope.getValue(), instanceMethodName);
                             if (readReferences.size() > 0 || assignmentReferences.size() > 0) {
                                 newInstanceMethods.add(instanceMethod);
-                                methodsEligibleForUpdate.remove(method);
+                                ineligibleMethods.add(method);
                             }
                         }
+                        instanceMethods.addAll(newInstanceMethods);
                     }
-                    instanceMethods.addAll(newInstanceMethods);
+                    methodsEligibleForUpdate.removeAll(ineligibleMethods);
                 }
 
                 List<Statement> newStatements = clazz.getBody().getStatements();
