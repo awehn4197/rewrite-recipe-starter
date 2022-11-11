@@ -62,7 +62,7 @@ public class MakeFalseInstanceMethodsStatic extends Recipe {
         @Override
         public J.CompilationUnit visitCompilationUnit(J.CompilationUnit cu, ExecutionContext p) {
             cu = super.visitCompilationUnit(cu, p);
-            List<J.ClassDeclaration> classes = cu.getClasses(); // this was originally to account for nested classes, don't know if still needed
+            List<J.ClassDeclaration> classes = cu.getClasses();
             List<J.ClassDeclaration> newClasses = new ArrayList<J.ClassDeclaration>();
 
             for (J.ClassDeclaration clazz : classes) {
@@ -100,7 +100,7 @@ public class MakeFalseInstanceMethodsStatic extends Recipe {
                     setCursor(new Cursor(getCursor(), method));
                     Cursor methodScope = getCursor();
                     for (J.VariableDeclarations instanceVariable : instanceVariables) {
-                        J.Identifier variableName = instanceVariable.getVariables().get(0).getName(); // this isn't robust enough, i admit
+                        J.Identifier variableName = instanceVariable.getVariables().get(0).getName();
                         List<J> readReferences = References.findRhsReferences(methodScope.getValue(), variableName);
                         List<Statement> assignmentReferences = References.findLhsReferences(methodScope.getValue(), variableName);
                         if (readReferences.size() > 0 || assignmentReferences.size() > 0) {
