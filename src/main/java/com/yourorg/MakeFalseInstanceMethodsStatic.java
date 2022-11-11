@@ -60,16 +60,6 @@ public class MakeFalseInstanceMethodsStatic extends Recipe {
 
         private MakeFalseInstanceMethodsStaticVisitor() {}
 
-//        @Override
-//        public J.ClassDeclaration visitClassDeclaration(J.ClassDeclaration classDecl, ExecutionContext context) {
-//            System.out.println("why not come here?");
-////            if(TypeUtils.isOfClassType(classDecl.getType(), oldClassName)) {
-////                // Don't modify the class that declares the static field being replaced
-////                return classDecl;
-////            }
-//            return super.visitClassDeclaration(classDecl, context);
-//        }
-
         @Override
         public J.CompilationUnit visitCompilationUnit(J.CompilationUnit cu, ExecutionContext p) {
             cu = super.visitCompilationUnit(cu, p);
@@ -138,7 +128,7 @@ public class MakeFalseInstanceMethodsStatic extends Recipe {
                             List<J> readReferences = References.findRhsReferences(methodScope.getValue(), instanceMethodName);
                             List<Statement> assignmentReferences = References.findLhsReferences(methodScope.getValue(), instanceMethodName);
                             if (readReferences.size() > 0 || assignmentReferences.size() > 0) {
-                                newInstanceMethods.add(instanceMethod);
+                                newInstanceMethods.add(method);
                                 ineligibleMethods.add(method);
                             }
                         }
