@@ -19,7 +19,6 @@ import lombok.EqualsAndHashCode;
 import lombok.Value;
 import org.openrewrite.*;
 import org.openrewrite.internal.lang.Nullable;
-import org.openrewrite.java.ChangeMethodTargetToStatic;
 import org.openrewrite.java.JavaIsoVisitor;
 import org.openrewrite.java.JavaVisitor;
 import org.openrewrite.java.MethodMatcher;
@@ -31,7 +30,6 @@ import java.util.function.Predicate;
 
 import static java.util.Collections.emptyList;
 import static org.openrewrite.Tree.randomId;
-import static org.openrewrite.java.tree.Space.EMPTY;
 
 @Value
 @EqualsAndHashCode(callSuper = true)
@@ -58,7 +56,8 @@ public class MakeFalseInstanceMethodsStatic extends Recipe {
 
     private class MakeFalseInstanceMethodsStaticVisitor extends JavaIsoVisitor<ExecutionContext> {
 
-        private MakeFalseInstanceMethodsStaticVisitor() {}
+        private MakeFalseInstanceMethodsStaticVisitor() {
+        }
 
         @Override
         public J.CompilationUnit visitCompilationUnit(J.CompilationUnit cu, ExecutionContext p) {
@@ -88,8 +87,8 @@ public class MakeFalseInstanceMethodsStatic extends Recipe {
                         boolean methodIsNonOverridable = (md.hasModifier(J.Modifier.Type.Private) || md.hasModifier(J.Modifier.Type.Final));
                         boolean classImplementsSerializable = clazz.getImplements() != null && clazz.getImplements().stream().anyMatch(i -> i.toString().equals("Serializable"));
                         boolean methodOverridesSerializableMethod = SERIALIZABLE_WRITE_OBJECT.matches(md, clazz)
-                                                                    || SERIALIZABLE_READ_OBJECT.matches(md, clazz)
-                                                                    || SERIALIZABLE_READ_OBJECT_NO_DATA.matches(md, clazz);
+                                || SERIALIZABLE_READ_OBJECT.matches(md, clazz)
+                                || SERIALIZABLE_READ_OBJECT_NO_DATA.matches(md, clazz);
                         if (methodIsNonOverridable && !(classImplementsSerializable && methodOverridesSerializableMethod)) {
                             methodsEligibleForUpdate.add(md);
                         }
@@ -159,8 +158,6 @@ public class MakeFalseInstanceMethodsStatic extends Recipe {
             return cu;
         }
     }
-
-
 
 
     // I borrowed this from RemoveUnusedLocalVariables. Would abstract it out to be shared given more time.

@@ -83,6 +83,7 @@ class MakeFalseInstanceMethodsStaticTest implements RewriteTest {
             )
         );
     }
+
     @Test
     void worksOnPrivateAndFinalMethods() {
         rewriteRun(
