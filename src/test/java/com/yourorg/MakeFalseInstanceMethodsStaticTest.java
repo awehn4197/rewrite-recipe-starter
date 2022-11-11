@@ -13,11 +13,11 @@ class MakeFalseInstanceMethodsStaticTest implements RewriteTest {
     //per test.
     @Override
     public void defaults(RecipeSpec spec) {
-        spec.recipe(new MakeFalseInstanceMethodsStatic());
+        spec.recipe(new MakeFalseInstanceMethodsStatic()).expectedCyclesThatMakeChanges(2);
     }
 
     @Test
-    void simple() {
+    void addStaticKeywordToFauxInstanceMethods() {
         rewriteRun(
             java("""
                         class Test {
@@ -49,102 +49,7 @@ class MakeFalseInstanceMethodsStaticTest implements RewriteTest {
         );
     }
 
-    @Test
-    void addStaticKeywordToFauxInstanceMethods() {
-        rewriteRun(
-            java("""
-                        class Test {
-                          private static String magicWord = "magic";
-                        
-                          private String getMagicWord() {
-                            String fancyFooBar = "fantastic";
-                            return magicWord;
-                          }
-                          
-                          // this person is weird and mean and declared a variable in the middle of their file :(
-                          private static String midFileString = "sldkfj";
-                        
-                          private void setMagicWord(String value) {
-                            magicWord = value;
-                          }
-                        
-                        }
-                    """,
-                """
-                        class Test {
-                          private static String magicWord = "magic";
-                        
-                          private static String getMagicWord() {
-                            return magicWord;
-                          }
-                        
-                          private static void setMagicWord(String value) {
-                            magicWord = value;
-                          }
-                        
-                        }
-                    """
-            )
-        );
-    }
 
-    @Test
-    void checksNestedClassesAndMakesChangesIfAppropriate() {
-        rewriteRun(
-            java("""
-                        class Test {
-                          private static String magicWord = "magic";
-                        
-                          private String getMagicWord() {
-                            return magicWord;
-                          }
-                        
-                          private void setMagicWord(String value) {
-                            magicWord = value;
-                          }
-                          
-                          class NestedTest {
-                              private static String boringWord = "boring";
-                            
-                              private String getBoringWord() {
-                                return boringWord;
-                              }
-                            
-                              private void setBoringWord(String value) {
-                                boringWord = value;
-                              }
-                          }
-                        
-                        }
-                    """,
-                """
-                        class Test {
-                          private static String magicWord = "magic";
-                        
-                          private static String getMagicWord() {
-                            return magicWord;
-                          }
-                        
-                          private static void setMagicWord(String value) {
-                            magicWord = value;
-                          }
-                          
-                          class NestedTest {
-                              private static String boringWord = "boring";
-                            
-                              private static String getBoringWord() {
-                                return boringWord;
-                              }
-                            
-                              private static void setBoringWord(String value) {
-                                boringWord = value;
-                              }
-                          }
-                        }
-                    """
-            )
-        );
-    }
 
     @Test
     void doesntModifyTrueInstanceMethods() {
@@ -208,7 +113,6 @@ class MakeFalseInstanceMethodsStaticTest implements RewriteTest {
                           private String getPhrase() {
                             return getStaticWord()+getInstanceWord();
                           }
-                        
                         }
                     """,
                 """
@@ -235,7 +139,6 @@ class MakeFalseInstanceMethodsStaticTest implements RewriteTest {
                           private String getPhrase() {
                             return getStaticWord()+getInstanceWord();
                           }
-                        
                         }
                     """
             )
@@ -247,40 +150,28 @@ class MakeFalseInstanceMethodsStaticTest implements RewriteTest {
         rewriteRun(
             java("""
                         class Test {
-                          private String magicWord;
-                          private String nonMagicWord;
+                          private static String staticWord;
                         
-                          protected String getMagicWord() {
-                            return magicWord;
-                          }
-                          
-                          String getNonMagicWord() {
-                            return nonMagicWord;
+                          protected String getStaticWord() {
+                            return staticWord;
                           }
                         
-                          public void setMagicWord(String value) {
-                            magicWord = value;
+                          public void setStaticWord(String value) {
+                            staticWord = value;
                           }
-                                                  
                         }
                     """,
                 """
                         class Test {
-                          private String magicWord;
-                          private String nonMagicWord;
+                          private static String staticWord;
                         
-                          protected String getMagicWord() {
-                            return magicWord;
-                          }
-                          
-                          String getNonMagicWord() {
-                            return nonMagicWord;
+                          protected String getStaticWord() {
+                            return staticWord;
                           }
                         
-                          public void setMagicWord(String value) {
-                            magicWord = value;
+                          public void setStaticWord(String value) {
+                            staticWord = value;
                           }
-                                                  
                         }
                     """
             )
@@ -291,12 +182,15 @@ class MakeFalseInstanceMethodsStaticTest implements RewriteTest {
     void doesntModifyExcludedMethods() {
         rewriteRun(
             java("""
-                        class Test {
-                           private void writeObject(java.io.ObjectOutputStream stream) throws IOException {
+                        import java.io.Serializable;
+                        import java.io.*;
+                        
+                        class Test implements Serializable {
+                           private void writeObject(ObjectOutputStream stream) throws IOException {
                                
                            }
                        
-                           private void readObject(java.io.ObjectInputStream stream) throws IOException, ClassNotFoundException {
+                           private void readObject(ObjectInputStream stream) throws IOException, ClassNotFoundException {
                                
                            }
                            
@@ -306,18 +200,81 @@ class MakeFalseInstanceMethodsStaticTest implements RewriteTest {
                         }
                     """,
                 """
-                        class Test {
-                           private void writeObject(java.io.ObjectOutputStream stream) throws IOException {
+                        import java.io.Serializable;
+                        import java.io.*;
+                        
+                        class Test implements Serializable {
+                           private void writeObject(ObjectOutputStream stream) throws IOException {
                                
                            }
                        
-                           private void readObject(java.io.ObjectInputStream stream) throws IOException, ClassNotFoundException {
+                           private void readObject(ObjectInputStream stream) throws IOException, ClassNotFoundException {
                                
                            }
                            
                            private void readObjectNoData() throws ObjectStreamException {
                            
                            }
+                        }
+                    """
+            )
+        );
+
+
+    }
+
+    @Test
+    void checksNestedClassesAndMakesChangesIfAppropriate() {
+        rewriteRun(
+            java("""
+                        class Test {
+                          private static String magicWord = "magic";
+                        
+                          private String getMagicWord() {
+                            return magicWord;
+                          }
+                        
+                          private void setMagicWord(String value) {
+                            magicWord = value;
+                          }
+                          
+                          class NestedTest {
+                              private static String boringWord = "boring";
+                            
+                              private String getBoringWord() {
+                                return boringWord;
+                              }
+                            
+                              private void setBoringWord(String value) {
+                                boringWord = value;
+                              }
+                          }
+                        
+                        }
+                    """,
+                """
+                        class Test {
+                          private static String magicWord = "magic";
+                        
+                          private static String getMagicWord() {
+                            return magicWord;
+                          }
+                        
+                          private static void setMagicWord(String value) {
+                            magicWord = value;
+                          }
+                          
+                          class NestedTest {
+                              private static String boringWord = "boring";
+                            
+                              private static String getBoringWord() {
+                                return boringWord;
+                              }
+                            
+                              private static void setBoringWord(String value) {
+                                boringWord = value;
+                              }
+                          }
                         }
                     """
             )

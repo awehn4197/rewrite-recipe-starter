@@ -37,9 +37,9 @@ import static org.openrewrite.java.tree.Space.EMPTY;
 @EqualsAndHashCode(callSuper = true)
 public class MakeFalseInstanceMethodsStatic extends Recipe {
 
-    private static final MethodMatcher SERIALIZABLE_WRITE_OBJECT = new MethodMatcher("java.io.Serializable writeObject(java.io.ObjectOutputStream)");
-    private static final MethodMatcher SERIALIZABLE_READ_OBJECT = new MethodMatcher("java.io.Serializable readObject(java.io.ObjectInputStream)");
-    private static final MethodMatcher SERIALIZABLE_READ_OBJECT_NO_DATA = new MethodMatcher("java.io.Serializable readObjectNoData()");
+    private static final MethodMatcher SERIALIZABLE_WRITE_OBJECT = new MethodMatcher("* writeObject(java.io.ObjectOutputStream)");
+    private static final MethodMatcher SERIALIZABLE_READ_OBJECT = new MethodMatcher("* readObject(java.io.ObjectInputStream)");
+    private static final MethodMatcher SERIALIZABLE_READ_OBJECT_NO_DATA = new MethodMatcher("* readObjectNoData()");
 
     @Override
     public String getDisplayName() {
@@ -60,19 +60,22 @@ public class MakeFalseInstanceMethodsStatic extends Recipe {
 
         private MakeFalseInstanceMethodsStaticVisitor() {}
 
-        @Override
-        public J.ClassDeclaration visitClassDeclaration(J.ClassDeclaration classDecl, ExecutionContext context) {
-//            if(TypeUtils.isOfClassType(classDecl.getType(), oldClassName)) {
-//                // Don't modify the class that declares the static field being replaced
-//                return classDecl;
-//            }
-            return super.visitClassDeclaration(classDecl, context);
-        }
+//        @Override
+//        public J.ClassDeclaration visitClassDeclaration(J.ClassDeclaration classDecl, ExecutionContext context) {
+//            System.out.println("why not come here?");
+////            if(TypeUtils.isOfClassType(classDecl.getType(), oldClassName)) {
+////                // Don't modify the class that declares the static field being replaced
+////                return classDecl;
+////            }
+//            return super.visitClassDeclaration(classDecl, context);
+//        }
 
         @Override
         public J.CompilationUnit visitCompilationUnit(J.CompilationUnit cu, ExecutionContext p) {
+            cu = super.visitCompilationUnit(cu, p);
             List<J.ClassDeclaration> classes = cu.getClasses(); // this was originally to account for nested classes, don't know if still needed
             List<J.ClassDeclaration> newClasses = new ArrayList<J.ClassDeclaration>();
+
             for (J.ClassDeclaration clazz : classes) {
                 List<J.VariableDeclarations> instanceVariables = new ArrayList<J.VariableDeclarations>();
 
@@ -92,10 +95,12 @@ public class MakeFalseInstanceMethodsStatic extends Recipe {
                     if (statement instanceof J.MethodDeclaration) {
                         J.MethodDeclaration md = (J.MethodDeclaration) statement;
                         allMethods.add(md);
-                        if ((md.hasModifier(J.Modifier.Type.Private) || md.hasModifier(J.Modifier.Type.Final))
-                                && !SERIALIZABLE_WRITE_OBJECT.matches(md, clazz)
-                                && !SERIALIZABLE_READ_OBJECT.matches(md, clazz)
-                                && !SERIALIZABLE_READ_OBJECT_NO_DATA.matches(md, clazz)) {
+                        boolean methodIsNonOverridable = (md.hasModifier(J.Modifier.Type.Private) || md.hasModifier(J.Modifier.Type.Final));
+                        boolean classImplementsSerializable = clazz.getImplements() != null && clazz.getImplements().stream().anyMatch(i -> i.toString().equals("Serializable"));
+                        boolean methodOverridesSerializableMethod = SERIALIZABLE_WRITE_OBJECT.matches(md, clazz)
+                                                                    || SERIALIZABLE_READ_OBJECT.matches(md, clazz)
+                                                                    || SERIALIZABLE_READ_OBJECT_NO_DATA.matches(md, clazz);
+                        if (methodIsNonOverridable && !(classImplementsSerializable && methodOverridesSerializableMethod)) {
                             methodsEligibleForUpdate.add(md);
                         }
                     }
@@ -116,7 +121,8 @@ public class MakeFalseInstanceMethodsStatic extends Recipe {
                     }
                 }
 
-                List<J.MethodDeclaration> newInstanceMethods = instanceMethods;
+                List<J.MethodDeclaration> newInstanceMethods = new ArrayList<J.MethodDeclaration>();
+                newInstanceMethods.addAll(instanceMethods);
 
                 // use this while loop to continue scanning the list of eligible methods to see if any of them call
                 // an instance method in which case they'll be removed. each loop might add more instance methods to check.
@@ -139,6 +145,8 @@ public class MakeFalseInstanceMethodsStatic extends Recipe {
                     instanceMethods.addAll(newInstanceMethods);
                 }
 
+                List<Statement> newStatements = clazz.getBody().getStatements();
+
                 // modify any eligible methods to include static flag
                 for (J.MethodDeclaration eligibleMethod : methodsEligibleForUpdate) {
                     if (!eligibleMethod.hasModifier(J.Modifier.Type.Static)) {
@@ -147,17 +155,20 @@ public class MakeFalseInstanceMethodsStatic extends Recipe {
                         modifiers.add(staticModifier);
                         eligibleMethod = eligibleMethod.withModifiers(modifiers);
                         int index = clazz.getBody().getStatements().indexOf(eligibleMethod);
-                        List<Statement> newStatements = clazz.getBody().getStatements();
                         newStatements.remove(index);
                         newStatements.add(index, eligibleMethod);
-                        newClasses.add(clazz.withBody(clazz.getBody().withStatements(newStatements)));
                     }
                 }
+
+                newClasses.add(clazz.withBody(clazz.getBody().withStatements(newStatements)));
+
             }
             cu = cu.withClasses(newClasses);
             return cu;
         }
     }
+
+
 
 
     // I borrowed this from RemoveUnusedLocalVariables. Would abstract it out to be shared given more time.
